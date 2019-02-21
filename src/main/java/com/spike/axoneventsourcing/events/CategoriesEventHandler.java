@@ -19,13 +19,13 @@ public class CategoriesEventHandler {
 
     @EventHandler
     public void on(CategoryCreatedEvent event) {
-        String categoryId = event.getCategoryId();
+        String categoryId = event.getIdentifier().getId();
         categories.put(categoryId, new Category(categoryId, event.getName()));
     }
 
     @EventHandler
     public void on(CategoryUpdatedEvent event) {
-        String categoryId = event.getCategoryId();
+        String categoryId = event.getIdentifier().getId();
         categories.put(categoryId, new Category(categoryId, event.getName()));
     }
 

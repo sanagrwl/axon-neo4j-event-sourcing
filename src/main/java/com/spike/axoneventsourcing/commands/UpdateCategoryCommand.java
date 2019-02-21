@@ -1,20 +1,21 @@
 package com.spike.axoneventsourcing.commands;
 
+import com.spike.axoneventsourcing.Identifier;
 import org.axonframework.modelling.command.TargetAggregateIdentifier;
 
 public class UpdateCategoryCommand {
     @TargetAggregateIdentifier
-    private final String categoryId;
+    private final Identifier identifier;
     private final String name;
     private final String branch = "master";
 
-    public UpdateCategoryCommand(String categoryId, String name) {
-        this.categoryId = categoryId;
+    public UpdateCategoryCommand(Identifier identifier, String name) {
+        this.identifier = identifier;
         this.name = name;
     }
 
-    public String getCategoryId() {
-        return categoryId;
+    public Identifier getIdentifier() {
+        return identifier;
     }
 
     public String getName() {

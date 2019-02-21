@@ -1,5 +1,6 @@
 package com.spike.axoneventsourcing.rest;
 
+import com.spike.axoneventsourcing.Identifier;
 import com.spike.axoneventsourcing.commands.CreateCategoryCommand;
 import com.spike.axoneventsourcing.commands.UpdateCategoryCommand;
 import com.spike.axoneventsourcing.queries.FindAllCategoriesQuery;
@@ -27,14 +28,15 @@ public class CategoryController {
     @PostMapping("/categories")
     public void createCategory() {
         String categoryId = UUID.randomUUID().toString();
-        commandGateway.send(new CreateCategoryCommand(categoryId, "Deluxe Chair"));
+        Identifier identifier = new Identifier(categoryId, "master");
+        commandGateway.send(new CreateCategoryCommand(identifier, "Deluxe Chair"));
     }
 
     @PutMapping("/categories/{id}")
     public void updateCategory(@PathVariable String id) {
-        commandGateway.send(new UpdateCategoryCommand(id, "Deluxe Chair new"));
+        Identifier identifier = new Identifier(id, "master");
+        commandGateway.send(new UpdateCategoryCommand(identifier, "Deluxe Chair new"));
     }
-
 
 
     @GetMapping("/categories")

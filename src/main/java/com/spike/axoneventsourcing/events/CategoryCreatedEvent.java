@@ -1,17 +1,19 @@
 package com.spike.axoneventsourcing.events;
 
+import com.spike.axoneventsourcing.Identifier;
+
 public class CategoryCreatedEvent {
 
-    private final String categoryId;
+    private final Identifier identifier;
     private final String name;
 
-    public CategoryCreatedEvent(String categoryId, String name) {
-        this.categoryId = categoryId;
+    public CategoryCreatedEvent(Identifier categoryId, String name) {
+        this.identifier = categoryId;
         this.name = name;
     }
 
-    public String getCategoryId() {
-        return categoryId;
+    public Identifier getIdentifier() {
+        return identifier;
     }
 
     public String getName() {

@@ -1,5 +1,6 @@
 package com.spike.axoneventsourcing.aggregates;
 
+import com.spike.axoneventsourcing.Identifier;
 import com.spike.axoneventsourcing.commands.CreateCategoryCommand;
 import com.spike.axoneventsourcing.commands.UpdateCategoryCommand;
 import com.spike.axoneventsourcing.events.CategoryCreatedEvent;
@@ -15,22 +16,22 @@ import org.axonframework.spring.stereotype.Aggregate;
 public class CategoryAggregate {
 
     @AggregateIdentifier
-    private String categoryId;
+    private Identifier identifier;
     private String name;
 
     @CommandHandler
     public CategoryAggregate(CreateCategoryCommand command) {
-        AggregateLifecycle.apply(new CategoryCreatedEvent(command.getCategoryId(), command.getName()), MetaData.with("branch", command.getBranch()));
+        AggregateLifecycle.apply(new CategoryCreatedEvent(command.getIdentifier(), command.getName()), MetaData.with("branch", command.getBranch()));
     }
 
     @CommandHandler
     public void handle(UpdateCategoryCommand command) {
-        AggregateLifecycle.apply(new CategoryUpdatedEvent(command.getCategoryId(), command.getName()), MetaData.with("branch", command.getBranch()));
+        AggregateLifecycle.apply(new CategoryUpdatedEvent(command.getIdentifier(), command.getName()), MetaData.with("branch", command.getBranch()));
     }
 
     @EventSourcingHandler
     public void on(CategoryCreatedEvent event) {
-        this.categoryId = event.getCategoryId();
+        this.identifier = event.getIdentifier();
         this.name = event.getName();
     }
 
