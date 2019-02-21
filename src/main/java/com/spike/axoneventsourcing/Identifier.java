@@ -3,6 +3,7 @@ package com.spike.axoneventsourcing;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.io.IOException;
 import java.util.Objects;
 
 public final class Identifier {
@@ -45,5 +46,13 @@ public final class Identifier {
     @Override
     public int hashCode() {
         return Objects.hash(id, branch);
+    }
+
+    public static Identifier from(String serializedId) {
+        try {
+            return new ObjectMapper().readValue(serializedId, Identifier.class);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

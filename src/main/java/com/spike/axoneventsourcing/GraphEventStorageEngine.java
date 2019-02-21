@@ -8,10 +8,8 @@ import org.axonframework.serialization.SerializedMetaData;
 import org.axonframework.serialization.SerializedObject;
 import org.axonframework.serialization.SimpleSerializedObject;
 import org.axonframework.serialization.xml.XStreamSerializer;
-import org.neo4j.driver.v1.Driver;
-import org.neo4j.driver.v1.Session;
-import org.neo4j.driver.v1.StatementResult;
-import org.neo4j.driver.v1.Value;
+import org.neo4j.driver.internal.value.NodeValue;
+import org.neo4j.driver.v1.*;
 import org.neo4j.driver.v1.types.Node;
 
 import java.time.Instant;
@@ -46,6 +44,10 @@ public class GraphEventStorageEngine implements EventStorageEngine {
 
                 session.writeTransaction(tx -> {
                     StatementResult result = tx.run(
+                    "match (e:event) where e.aggregateIdentifier = $aggregateIdentifier " +
+                            "with e order by e.sequenceNumber desc " +
+                            "with collect(e) as all_events " +
+                            "with head(all_events) as latest_event " +
                         "CREATE (a:event) " +
                             "SET a.eventIdentifier = $eventIdentifier " +
                             "SET a.aggregateIdentifier = $aggregateIdentifier " +
@@ -56,7 +58,11 @@ public class GraphEventStorageEngine implements EventStorageEngine {
                             "SET a.payloadRevision = $payloadRevision " +
                             "SET a.payload = $payload " +
                             "SET a.metadata = $metadata " +
-                            "RETURN id(a)",
+                            "SET a.branch = $branch " +
+                        "FOREACH (n IN case when (latest_event is not null) then [1] else [] end | " +
+                            "create (latest_event)-[:next {branch: $branch}]->(a) " +
+                        ") " +
+                        "RETURN id(a)",
                         parameters(
                             "eventIdentifier", event.getIdentifier(),
                             "aggregateIdentifier", event.getAggregateIdentifier(),
@@ -66,7 +72,8 @@ public class GraphEventStorageEngine implements EventStorageEngine {
                             "payloadType", payload.getType().getName(),
                             "payloadRevision", payload.getType().getRevision(),
                             "payload", payload.getData(),
-                            "metadata", metaData.getData()
+                            "metadata", metaData.getData(),
+                            "branch", event.getMetaData().get("branch")
                         )
                     );
                     return String.valueOf(result.single().get(0));
@@ -83,41 +90,77 @@ public class GraphEventStorageEngine implements EventStorageEngine {
 
     @Override
     public Stream<? extends TrackedEventMessage<?>> readEvents(TrackingToken trackingToken, boolean b) {
-        System.out.println("Tracking Token");
-        System.out.println(trackingToken);
-        System.out.println(b);
-        System.out.println("end tracking token");
-        return null;
+        try (Session session = driver.session()) {
+
+            List<Record> records = session.run("match (e:event) return e").list();
+            if (records.isEmpty()) {
+                return Stream.empty();
+            }
+
+            List<Value> values = records.get(records.size() - 1).values();
+
+
+            Stream<? extends TrackedEventMessage<?>> stream = values.stream()
+                .map(nodeValue -> {
+
+                    GenericDomainEventMessage message = new GenericDomainEventMessage<>(
+                        nodeValue.get("type").asString(),
+                        nodeValue.get("aggregateIdentifier").asString(),
+                        Long.parseLong(nodeValue.get("sequenceNumber").asString()),
+                        deserializePayload(nodeValue),
+                        deserializeMetadata(nodeValue),
+                        nodeValue.get("eventIdentifier").asString(),
+                        Instant.parse(nodeValue.get("timestamp").asString())
+                    );
+
+                    TrackedEventMessage<?> m = new GenericTrackedDomainEventMessage(trackingToken, message);
+
+                    return m;
+                });
+
+
+            return stream;
+        }
     }
 
     @Override
     public DomainEventStream readEvents(String aggregateIdentifier, long firstSequenceNumber) {
+        Identifier identifier = Identifier.from(aggregateIdentifier);
 
         try (Session session = driver.session()) {
 
             AtomicReference<Long> sequenceNumber = new AtomicReference<>();
-            List<Value> values = session.run("match (e:event) return e").single().values();
+            List<Record> records = session.run(
+                "match (e:event) " +
+                    "where e.aggregateIdentifier = $aggregateIdentifier and e.branch = $branch " +
+                    "return e order by e.sequenceNumber",
+                parameters(
+                    "aggregateIdentifier", identifier.getId(),
+                    "branch", identifier.getBranch()
+                )
+            ).list();
+
+            if (records.isEmpty()) {
+                return DomainEventStream.of(Stream.empty(), null);
+            }
 
 
-            Stream<? extends DomainEventMessage<?>> stream = values.stream()
-                .map(v -> {
-                    Node node = values.get(0).asNode();
-
+            Stream<? extends DomainEventMessage<?>> stream = records.stream()
+                .map(record -> {
+                    Value nodeValue = record.values().get(0);
                     GenericDomainEventMessage message = new GenericDomainEventMessage<>(
-                        node.get("type").asString(),
-                        node.get("aggregateIdentifier").asString(),
-                        Long.parseLong(node.get("sequenceNumber").asString()),
-                        deserializePayload(node),
-                        deserializeMetadata(node),
-                        node.get("eventIdentifier").asString(),
-                        Instant.parse(node.get("timestamp").asString())
+                        nodeValue.get("type").asString(),
+                        nodeValue.get("aggregateIdentifier").asString(),
+                        Long.parseLong(nodeValue.get("sequenceNumber").asString()),
+                        deserializePayload(nodeValue),
+                        deserializeMetadata(nodeValue),
+                        nodeValue.get("eventIdentifier").asString(),
+                        Instant.parse(nodeValue.get("timestamp").asString())
                     );
                     return (DomainEventMessage<?>) message;
                 })
                 .peek(event -> {
-                    if (event != null) {
-                        sequenceNumber.set(event.getSequenceNumber());
-                    }
+                    sequenceNumber.set(event.getSequenceNumber());
                 });
 
 
@@ -126,12 +169,12 @@ public class GraphEventStorageEngine implements EventStorageEngine {
 
     }
 
-    private MetaData deserializeMetadata(Node node) {
-        return (MetaData) serializer.doDeserialize(new SerializedMetaData(node.get("metadata").asByteArray(), byte[].class), serializer.getXStream());
+    private MetaData deserializeMetadata(Value nodeValue) {
+        return (MetaData) serializer.doDeserialize(new SerializedMetaData(nodeValue.get("metadata").asByteArray(), byte[].class), serializer.getXStream());
     }
 
-    private Object deserializePayload(Node node) {
-        SimpleSerializedObject<byte[]> serializedObject = new SimpleSerializedObject<>(node.get("payload").asByteArray(), byte[].class, node.get("payloadType").asString(), null);
+    private Object deserializePayload(Value nodeValue) {
+        SimpleSerializedObject<byte[]> serializedObject = new SimpleSerializedObject<>(nodeValue.get("payload").asByteArray(), byte[].class, nodeValue.get("payloadType").asString(), null);
         return serializer.doDeserialize(serializedObject, serializer.getXStream());
     }
 
