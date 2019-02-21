@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.Objects;
 
-public class Identifier {
+public final class Identifier {
     private String id;
     private String branch;
 

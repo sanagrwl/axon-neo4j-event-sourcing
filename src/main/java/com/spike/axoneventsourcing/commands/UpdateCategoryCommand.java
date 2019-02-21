@@ -7,7 +7,6 @@ public class UpdateCategoryCommand {
     @TargetAggregateIdentifier
     private final Identifier identifier;
     private final String name;
-    private final String branch = "master";
 
     public UpdateCategoryCommand(Identifier identifier, String name) {
         this.identifier = identifier;
@@ -20,9 +19,5 @@ public class UpdateCategoryCommand {
 
     public String getName() {
         return name;
-    }
-
-    public String getBranch() {
-        return branch;
     }
 }

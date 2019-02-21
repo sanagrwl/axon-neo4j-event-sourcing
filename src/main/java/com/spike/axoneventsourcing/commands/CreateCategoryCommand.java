@@ -8,7 +8,6 @@ public class CreateCategoryCommand {
     @TargetAggregateIdentifier
     private final Identifier identifier;
     private final String name;
-    private final String branch = "master";
 
     public CreateCategoryCommand(Identifier identifier, String name) {
         this.identifier = identifier;
@@ -21,9 +20,5 @@ public class CreateCategoryCommand {
 
     public String getName() {
         return name;
-    }
-
-    public String getBranch() {
-        return branch;
     }
 }
