@@ -8,9 +8,7 @@ import org.axonframework.serialization.SerializedMetaData;
 import org.axonframework.serialization.SerializedObject;
 import org.axonframework.serialization.SimpleSerializedObject;
 import org.axonframework.serialization.xml.XStreamSerializer;
-import org.neo4j.driver.internal.value.NodeValue;
 import org.neo4j.driver.v1.*;
-import org.neo4j.driver.v1.types.Node;
 
 import java.time.Instant;
 import java.util.List;
@@ -43,11 +41,16 @@ public class GraphEventStorageEngine implements EventStorageEngine {
 
 
                 session.writeTransaction(tx -> {
+
                     StatementResult result = tx.run(
-                    "match (e:event) where e.aggregateIdentifier = $aggregateIdentifier " +
-                            "with e order by e.sequenceNumber desc " +
-                            "with collect(e) as all_events " +
-                            "with head(all_events) as latest_event " +
+                    "match (e:event) " +
+                            "where e.aggregateIdentifier = $aggregateIdentifier " +
+                                "and e.branch in [$branch, 'master'] " +
+                            "with e.branch as branch, e order by e.sequenceNumber desc " +
+                            "with filter(x in collect(e) where x.branch = 'test') as branchNodes, " +
+                                 "filter(x in collect(e) where x.branch = 'master') as masterNodes " +
+                            "with head(branchNodes) as br, head(masterNodes) as mn " +
+                            "with case when (br is not null) then br else mn end as latest_event " +
                         "CREATE (a:event) " +
                             "SET a.eventIdentifier = $eventIdentifier " +
                             "SET a.aggregateIdentifier = $aggregateIdentifier " +
@@ -130,15 +133,11 @@ public class GraphEventStorageEngine implements EventStorageEngine {
         try (Session session = driver.session()) {
 
             AtomicReference<Long> sequenceNumber = new AtomicReference<>();
-            List<Record> records = session.run(
-                "match (e:event) " +
-                    "where e.aggregateIdentifier = $aggregateIdentifier and e.branch = $branch " +
-                    "return e order by e.sequenceNumber",
-                parameters(
-                    "aggregateIdentifier", identifier.getId(),
-                    "branch", identifier.getBranch()
-                )
-            ).list();
+            List<Record> records = getAllEventsForAggregate(identifier.getId(), identifier.getBranch());
+
+            if (records.isEmpty() && !"master".equals(identifier.getBranch())) {
+                records = getAllEventsForAggregate(identifier.getId(), "master");
+            }
 
             if (records.isEmpty()) {
                 return DomainEventStream.of(Stream.empty(), null);
@@ -167,6 +166,21 @@ public class GraphEventStorageEngine implements EventStorageEngine {
             return DomainEventStream.of(stream, sequenceNumber::get);
         }
 
+    }
+
+    private List<Record> getAllEventsForAggregate(String aggregateId, String branch) {
+        try (Session session = driver.session()) {
+            return session.run(
+                "match p = (e:event)<-[:next*0..]-(:event)" +
+                    " where e.aggregateIdentifier = $aggregateIdentifier and e.branch = $branch" +
+                    " unwind nodes(p) as n" +
+                    " return n order by n.sequenceNumber",
+                parameters(
+                    "aggregateIdentifier", aggregateId,
+                    "branch", branch
+                )
+            ).list();
+        }
     }
 
     private MetaData deserializeMetadata(Value nodeValue) {

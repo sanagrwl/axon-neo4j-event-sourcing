@@ -35,7 +35,7 @@ public class CategoryController {
     @PutMapping("/categories/{id}")
     public void updateCategory(@PathVariable String id) {
         Identifier identifier = new Identifier(id, "master");
-        commandGateway.send(new UpdateCategoryCommand(identifier, "Deluxe Chair new"));
+        commandGateway.send(new UpdateCategoryCommand(identifier, "Deluxe Chair master"));
     }
 
 

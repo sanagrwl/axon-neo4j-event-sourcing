@@ -1,6 +1,5 @@
 package com.spike.axoneventsourcing.aggregates;
 
-import com.spike.axoneventsourcing.Identifier;
 import com.spike.axoneventsourcing.commands.CreateCategoryCommand;
 import com.spike.axoneventsourcing.commands.UpdateCategoryCommand;
 import com.spike.axoneventsourcing.events.CategoryCreatedEvent;
